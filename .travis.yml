@@ -1,0 +1,37 @@
+language: go
+jdk: openjdk8
+
+android:
+  components:
+    - tools
+    - platform-tools
+    - tools
+
+matrix:
+  include:
+    - os: linux
+      dist: xenial
+      sudo: true
+      go: 1.12.x
+      before_install:
+        - go get -u golang.org/x/mobile/cmd/gomobile
+        - go get -u golang.org/x/mobile/cmd/gobind
+      script:
+        - make build
+        - make test
+
+    - os: osx
+      osx_image: xcode10.1
+      sudo: true
+      go: 1.12.x
+      before_install:
+        - go get -u golang.org/x/mobile/cmd/gomobile
+        - go get -u golang.org/x/mobile/cmd/gobind
+      script:
+        - make build
+        - make buildosx
+        - make test
+
+after_success:
+  # send coverage reports to Codecov
+  - bash <(curl -s https://codecov.io/bash) -f "!mock.go"

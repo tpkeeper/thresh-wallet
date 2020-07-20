@@ -1,0 +1,6 @@
+{
+	"endpoint": ":9099",
+	"chainnet": "testnet",
+	"datadir": "your-wallet-datadir",
+	"token_secret": "your-token-secret"
+}
