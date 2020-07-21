@@ -1,5 +1,10 @@
 # thresh-wallet
 
+**this is a fork of [https://github.com/keyfuse/thresh-wallet](https://github.com/keyfuse/thresh-wallet)**
+
+**this repositiry is enhanced by adding ethereum support** 
+
+
 A cross-platform keyless Bitcoin wallet service powered by Breakthrough Cryptography.
 
 [![Build Status](https://travis-ci.org/keyfuse/thresh-wallet.png)](https://travis-ci.org/keyfuse/thresh-wallet) [![Go Report Card](https://goreportcard.com/badge/github.com/keyfuse/thresh-wallet)](https://goreportcard.com/report/github.com/keyfuse/thresh-wallet)
