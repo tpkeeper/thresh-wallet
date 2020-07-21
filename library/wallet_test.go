@@ -7,6 +7,12 @@
 package library
 
 import (
+	"encoding/hex"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/keyfuse/tokucore/network"
+	"github.com/keyfuse/tokucore/xcore/bip32"
+	"github.com/keyfuse/tokucore/xcrypto"
+	"net/http"
 	"testing"
 
 	"github.com/tpkeeper/thresh-wallet/server"
@@ -241,3 +247,91 @@ func TestAPIWalletSend(t *testing.T) {
 		assert.Equal(t, 500, rsp.Code)
 	}
 }
+
+func TestSignECDSACommon(t *testing.T) {
+	var token string
+
+	ts, cleanup := server.MockServer()
+	defer cleanup()
+
+	// Token.
+	{
+		body := APIGetToken(ts.URL, mockMobile, "vcode")
+		rsp := &TokenResponse{}
+		unmarshal(body, rsp)
+		assert.Equal(t, 200, rsp.Code)
+		token = rsp.Token
+	}
+
+	var err error
+
+	var masterkey *bip32.HDKey
+
+	rsp := &WalletSendResponse{}
+	rsp.Code = http.StatusOK
+
+	// Master pravite key.
+	{
+		masterkey, err = bip32.NewHDKeyFromString(mockMasterPrvKey)
+		if err != nil {
+			rsp.Code = http.StatusInternalServerError
+			rsp.Message = err.Error()
+			t.Fatal(err)
+		}
+	}
+
+	cliPrvKey, err := masterkey.Derive(0)
+	net := network.TestNet
+	mockSvrMasterPrvKey := "tprv8ZgxMBicQKsPfNhXDHV93ummM6rEzTmxHf96Mk3FnpgoaoNYPjfSCZyHFnFQnQDLAiMNsvJqEtvjCkvo5P3CPRHQx5GcZxPqRHy31q2oWXD"
+	svrpubkey, err := createSvrChildPubKey(0, mockSvrMasterPrvKey, net)
+	svrPubKey, err := bip32.NewHDKeyFromString(svrpubkey)
+	sigHash := []byte("helloword")
+	sigBts, sharePubkey, err := SignECDSACommon(ts.URL, token, 0, sigHash, cliPrvKey, svrPubKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sig := xcrypto.NewSignatureEcdsa()
+	if err := sig.Deserialize(sigBts); err != nil {
+		t.Fatal(err)
+	}
+	//rsBytes := make([]byte, 0)
+	//rsBytes = append(rsBytes, sig.R.Bytes()...)
+	//rsBytes = append(rsBytes, sig.S.Bytes()...)
+	t.Log(hex.EncodeToString(sharePubkey.SerializeUncompressed()))
+	//t.Log(hex.EncodeToString(rsBytes))
+
+	ethRsBts, err := TransToEthSig(sig,sharePubkey,sigHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v := ethRsBts[0] - 27
+	copy(ethRsBts, ethRsBts[1:])
+	ethRsBts[64] = v
+	t.Log(hex.EncodeToString(ethRsBts))
+
+	pubKeyrec, err := crypto.Ecrecover(sigHash, ethRsBts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(hex.EncodeToString(pubKeyrec))
+
+	if !crypto.VerifySignature(sharePubkey.Serialize(), sigHash, ethRsBts) {
+		t.Fatal("verifysignature err")
+	}
+}
+
+
+func createSvrChildPubKey(pos uint32, svrMasterPrvKey string, net *network.Network) (string, error) {
+	svrmasterkey, err := bip32.NewHDKeyFromString(svrMasterPrvKey)
+	if err != nil {
+		return "", err
+	}
+	svrchild, err := svrmasterkey.Derive(pos)
+	if err != nil {
+		return "", err
+	}
+	return svrchild.HDPublicKey().ToString(net), nil
+}
+
