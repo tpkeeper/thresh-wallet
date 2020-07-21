@@ -9,6 +9,7 @@ package library
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -619,4 +620,76 @@ func signECDSA(url string, token string, pos uint32, txInIdx int, sighash []byte
 		tx.EmbedIdxEcdsaSignature(txInIdx, sharepub, sharesig, xcore.SigHashAll)
 	}
 	return nil
+}
+
+
+func signECDSACommon(url string, token string, pos uint32, sighash []byte, cliPrvKey *bip32.HDKey, svrPubKey *bip32.HDKey) ([]byte, error) {
+	var shareR1 *secp256k1.Scalar
+
+	aliceParty := xcrypto.NewEcdsaParty(cliPrvKey.PrivateKey())
+	// Phase1.
+	sharepub := aliceParty.Phase1(svrPubKey.PublicKey())
+	// Phase2.
+	encpk1, encpub1, scalarR1 := aliceParty.Phase2(sighash)
+
+	// Get R2.
+	{
+		r2req := &proto.EcdsaR2Request{
+			Pos:  pos,
+			Hash: sighash,
+			R1:   scalarR1,
+		}
+
+		path := fmt.Sprintf("%s/api/ecdsa/r2", url)
+		httpRsp, err := proto.NewRequest().SetHeaders("Authorization", token).Post(path, r2req)
+		if err != nil {
+			return nil, err
+		}
+		r2rsp := &proto.EcdsaR2Response{}
+		if err := httpRsp.Json(&r2rsp); err != nil {
+			return nil, err
+		}
+
+		// Check two party Share R is same or not.
+		shareR1 = aliceParty.Phase3(r2rsp.R2)
+		if r2rsp.ShareR.X.Cmp(shareR1.X) != 0 || r2rsp.ShareR.Y.Cmp(shareR1.Y) != 0 {
+			return nil,fmt.Errorf("shareR.not.equal")
+		}
+	}
+
+	// Get S2.
+	{
+		s2req := &proto.EcdsaS2Request{
+			Pos:     pos,
+			Hash:    sighash,
+			R1:      scalarR1,
+			EncPK1:  encpk1,
+			EncPub1: encpub1,
+			ShareR:  shareR1,
+		}
+
+		path := fmt.Sprintf("%s/api/ecdsa/s2", url)
+		httpRsp, err := proto.NewRequest().SetHeaders("Authorization", token).Post(path, s2req)
+		if err != nil {
+			return nil, err
+		}
+		s2rsp := &proto.EcdsaS2Response{}
+		if err := httpRsp.Json(&s2rsp); err != nil {
+			return nil, err
+		}
+
+		// Phase5.
+		sharesig, err := aliceParty.Phase5(shareR1, s2rsp.S2)
+		if err != nil {
+			return nil, err
+		}
+
+		// Verify.
+		if err := xcrypto.EcdsaVerify(sharepub, sighash, sharesig); err != nil {
+			return nil, err
+		}
+		return sharesig, nil
+
+	}
+	return nil, errors.New("get sharesig err")
 }
