@@ -301,27 +301,21 @@ func TestSignECDSACommon(t *testing.T) {
 	t.Log(hex.EncodeToString(sharePubkey.SerializeUncompressed()))
 	//t.Log(hex.EncodeToString(rsBytes))
 
-	ethRsBts, err := TransToEthSig(sig,sharePubkey,sigHash)
+	ethRsBts, err := TransToEthSig(sig, sharePubkey, sigHash)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	v := ethRsBts[0] - 27
-	copy(ethRsBts, ethRsBts[1:])
-	ethRsBts[64] = v
 	t.Log(hex.EncodeToString(ethRsBts))
 
-	pubKeyrec, err := crypto.Ecrecover(sigHash, ethRsBts)
+	_, err = crypto.Ecrecover(sigHash, ethRsBts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log(hex.EncodeToString(pubKeyrec))
-
 	if !crypto.VerifySignature(sharePubkey.Serialize(), sigHash, ethRsBts) {
 		t.Fatal("verifysignature err")
 	}
 }
-
 
 func createSvrChildPubKey(pos uint32, svrMasterPrvKey string, net *network.Network) (string, error) {
 	svrmasterkey, err := bip32.NewHDKeyFromString(svrMasterPrvKey)
@@ -334,4 +328,3 @@ func createSvrChildPubKey(pos uint32, svrMasterPrvKey string, net *network.Netwo
 	}
 	return svrchild.HDPublicKey().ToString(net), nil
 }
-

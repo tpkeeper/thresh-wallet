@@ -9,7 +9,19 @@ import (
 	"math/big"
 )
 
-func TransToEthSig(sig *xcrypto.SignatureEcdsa,pubKey *xcrypto.PubKey,sigHash []byte) ([]byte, error) {
+func TransToEthSig(sig *xcrypto.SignatureEcdsa, pubKey *xcrypto.PubKey, sigHash []byte) ([]byte, error) {
+	compactBts, err := signCompact(sig, pubKey, sigHash)
+	if err != nil {
+		return nil, err
+	}
+
+	v := compactBts[0] - 27
+	copy(compactBts, compactBts[1:])
+	compactBts[64] = v
+	return compactBts, nil
+}
+
+func signCompact(sig *xcrypto.SignatureEcdsa, pubKey *xcrypto.PubKey, sigHash []byte) ([]byte, error) {
 	curve := btcec.S256()
 	for i := 0; i < (curve.H+1)*2; i++ {
 		pk, err := recoverKeyFromSignature(curve, sig, sigHash, i, true)
@@ -41,8 +53,6 @@ func TransToEthSig(sig *xcrypto.SignatureEcdsa,pubKey *xcrypto.PubKey,sigHash []
 	}
 	return nil, errors.New("tranfer err")
 }
-
-
 
 func isOdd(a *big.Int) bool {
 	return a.Bit(0) == 1
